@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Pixel Raiders - Classic</title>
+<style>
+  body {
+    background: radial-gradient(circle, #222 60%, #000);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: #0f0;
+    height: 100vh;
+    overflow: hidden;
+    font-family: "Press Start 2P", monospace;
+  }
+
+  h1 {
+    font-size: 20px;
+    margin-bottom: 5px;
+  }
+
+  #score {
+    font-size: 16px;
+    margin-bottom: 10px;
+  }
+
+  canvas {
+    background: #000;
+    border: 2px solid #0f0;
+    box-shadow: 0 0 15px #0f0;
+    width: min(90vw, 400px);
+    height: auto;
+    touch-action: none;
+  }
+
+  #controls {
+    display: none;
+    position: absolute;
+    bottom: 40px;
+    grid-template-columns: 80px 80px 80px;
+    grid-template-rows: 80px 80px;
+    gap: 10px;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .btn {
+    background: rgba(0, 255, 0, 0.15);
+    border: 2px solid #0f0;
+    border-radius: 12px;
+    color: #0f0;
+    font-size: 20px;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 0 10px #0f0;
+  }
+
+  .btn:active {
+    background: rgba(0, 255, 0, 0.4);
+  }
+
+  @media (max-width: 700px) {
+    #controls {
+      display: grid;
+    }
+  }
+</style>
+</head>
+<body>
+  <h1>🏺 Pixel Raiders</h1>
+  <div id="score">Score: 0</div>
+  <canvas id="game" width="400" height="400"></canvas>
+
+  <!-- Touch Controls -->
+  <div id="controls">
+    <div></div>
+    <div class="btn" id="up">▲</div>
+    <div></div>
+    <div class="btn" id="left">◀</div>
+    <div class="btn" id="down">▼</div>
+    <div class="btn" id="right">▶</div>
+  </div>
+
+<script>
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+const scoreEl = document.getElementById("score");
+
+const tile = 20;
+const rows = canvas.height / tile;
+const cols = canvas.width / tile;
+
+let player = { x: 1, y: 1 };
+let direction = "STOP";
+let treasures = [];
+let enemies = [];
+let walls = [];
+let score = 0;
+let gameOver = false;
+
+// Build map walls
+function initWalls() {
+  walls = [];
+  for (let x = 0; x < cols; x++) {
+    walls.push({ x, y: 0 });
+    walls.push({ x, y: rows - 1 });
+  }
+  for (let y = 0; y < rows; y++) {
+    walls.push({ x: 0, y });
+    walls.push({ x: cols - 1, y });
+  }
+
+  // Inner walls (example)
+  for (let x = 4; x < 16; x += 2) walls.push({ x, y: 8 });
+  for (let y = 5; y < 15; y += 3) walls.push({ x: 10, y });
+}
+
+function randomCell() {
+  let cell;
+  do {
+    cell = { 
+      x: Math.floor(Math.random() * cols), 
+      y: Math.floor(Math.random() * rows)
+    };
+  } while (walls.some(w => w.x === cell.x && w.y === cell.y));
+  return cell;
+}
+
+function spawnTreasures(count = 3) {
+  treasures = [];
+  for (let i = 0; i < count; i++) treasures.push(randomCell());
+}
+
+function spawnEnemies(count = 2) {
+  enemies = [];
+  for (let i = 0; i < count; i++) {
+    const e = randomCell();
+    e.dir = ["UP","DOWN","LEFT","RIGHT"][Math.floor(Math.random()*4)];
+    enemies.push(e);
+  }
+}
+
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Draw walls
+  ctx.fillStyle = "#333";
+  for (let w of walls)
+    ctx.fillRect(w.x * tile, w.y * tile, tile - 1, tile - 1);
+
+  // Draw treasures
+  ctx.fillStyle = "gold";
+  for (let t of treasures)
+    ctx.fillRect(t.x * tile + 5, t.y * tile + 5, tile - 10, tile - 10);
+
+  // Draw enemies
+  ctx.fillStyle = "red";
+  for (let e of enemies)
+    ctx.fillRect(e.x * tile, e.y * tile, tile - 1, tile - 1);
+
+  // Draw player
+  ctx.fillStyle = "#0f0";
+  ctx.fillRect(player.x * tile, player.y * tile, tile - 1, tile - 1);
+
+  if (gameOver) {
+    ctx.fillStyle = "white";
+    ctx.font = "20px Arial";
+    ctx.fillText("Game Over!", 120, 200);
+  }
+}
+
+function update() {
+  if (gameOver) return;
+
+  // Move player
+  let newX = player.x;
+  let newY = player.y;
+
+  if (direction === "UP") newY--;
+  else if (direction === "DOWN") newY++;
+  else if (direction === "LEFT") newX--;
+  else if (direction === "RIGHT") newX++;
+
+  // Collision with walls
+  if (!walls.some(w => w.x === newX && w.y === newY)) {
+    player.x = newX;
+    player.y = newY;
+  }
+
+  // Collect treasure
+  treasures = treasures.filter(t => {
+    if (t.x === player.x && t.y === player.y) {
+      score += 10;
+      scoreEl.textContent = "Score: " + score;
+      return false;
+    }
+    return true;
+  });
+
+  if (treasures.length === 0) spawnTreasures(3);
+
+  // Enemy movement
+  enemies.forEach(e => {
+    let oldX = e.x, oldY = e.y;
+    if (e.dir === "UP") e.y--;
+    else if (e.dir === "DOWN") e.y++;
+    else if (e.dir === "LEFT") e.x--;
+    else if (e.dir === "RIGHT") e.x++;
+
+    // Bounce on walls
+    if (walls.some(w => w.x === e.x && w.y === e.y)) {
+      e.x = oldX; e.y = oldY;
+      e.dir = ["UP","DOWN","LEFT","RIGHT"][Math.floor(Math.random()*4)];
+    }
+
+    // Player collision
+    if (e.x === player.x && e.y === player.y) gameOver = true;
+  });
+}
+
+function loop() {
+  update();
+  draw();
+  if (!gameOver) setTimeout(loop, 120);
+}
+
+document.addEventListener("keydown", (e) => {
+  if (e.key === "ArrowUp" && direction !== "DOWN") direction = "UP";
+  else if (e.key === "ArrowDown" && direction !== "UP") direction = "DOWN";
+  else if (e.key === "ArrowLeft" && direction !== "RIGHT") direction = "LEFT";
+  else if (e.key === "ArrowRight" && direction !== "LEFT") direction = "RIGHT";
+  else if (e.key.toLowerCase() === "r") resetGame();
+});
+
+// Touch controls
+document.getElementById("up").addEventListener("touchstart", () => { if (direction !== "DOWN") direction = "UP"; });
+document.getElementById("down").addEventListener("touchstart", () => { if (direction !== "UP") direction = "DOWN"; });
+document.getElementById("left").addEventListener("touchstart", () => { if (direction !== "RIGHT") direction = "LEFT"; });
+document.getElementById("right").addEventListener("touchstart", () => { if (direction !== "LEFT") direction = "RIGHT"; });
+
+function resetGame() {
+  player = { x: 1, y: 1 };
+  direction = "STOP";
+  score = 0;
+  gameOver = false;
+  initWalls();
+  spawnTreasures(3);
+  spawnEnemies(2);
+  scoreEl.textContent = "Score: 0";
+  loop();
+}
+
+initWalls();
+spawnTreasures(3);
+spawnEnemies(2);
+loop();
+</script>
+</body>
+</html>
